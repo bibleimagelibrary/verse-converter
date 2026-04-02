@@ -1,3 +1,58 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+	--color-primary: #3b5a9e;
+	--color-primary-dark: #2d4477;
+	--color-primary-soft: #d8dfef;
+	
+	--color-secondary: #af6565;
+	--color-secondary-dark: #854d4d;
+	--color-secondary-soft: #efe0e0;
+}
+
+@layer components {
+	.app-input {
+		@apply w-full rounded-md border border-slate-300 px-3 py-3 font-mono text-[0.95rem] transition focus:outline-none;
+	}
+
+	.app-input:focus {
+		border-color: var(--color-primary);
+		box-shadow: 0 0 0 3px var(--color-primary-soft);
+	}
+
+	.app-btn-primary {
+		@apply min-w-0 flex-1 whitespace-nowrap rounded-md px-6 py-3 text-xl font-semibold text-white transition active:scale-[0.98] md:min-w-[140px] md:flex-none;
+		background-color: var(--color-primary);
+	}
+
+	.app-btn-primary:hover {
+		background-color: var(--color-primary-dark);
+	}
+
+	.app-btn-secondary {
+		@apply min-w-0 flex-1 whitespace-nowrap rounded-md px-4 py-[0.6rem] text-base font-semibold text-white transition active:scale-[0.98] md:min-w-[140px] md:flex-none;
+		background-color: var(--color-secondary);
+	}
+
+	.app-btn-secondary:hover {
+		background-color: var(--color-secondary-dark);
+	}
+
+	.app-text-primary {
+		color: var(--color-primary);
+	}
+
+	.app-text-secondary {
+		color: var(--color-secondary);
+	}
+
+	.app-bg-primary-soft {
+		background-color: var(--color-primary-soft);
+	}
+
+	.app-hover-primary-border:hover {
+		border-color: var(--color-primary);
+	}
+}
