@@ -11,11 +11,12 @@ import "./style.css";
 const app = document.querySelector<HTMLDivElement>("#app")!;
 const PARALLEL_PASSAGES_API =
   "https://q9md038uhk.execute-api.us-east-1.amazonaws.com/parallel-passages";
+const logoSrc = `${import.meta.env.BASE_URL}verse-converter.png`;
 
 app.innerHTML = `
   <div class="mx-auto max-w-[1040px] px-3 py-2 md:px-4">
     <div class="mb-2 flex items-center justify-center gap-3">
-      <img src="verse-converter.png" alt="Verse Converter logo" class="h-12 w-12 rounded" />
+      <img src="${logoSrc}" alt="Verse Converter logo" class="h-12 w-12 rounded" />
       <h1 class="m-0 text-center text-2xl font-bold leading-tight text-slate-800 md:text-2xl">Bible Verse Converter & Parallel Passages</h1>
     </div>
     
