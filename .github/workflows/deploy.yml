@@ -37,10 +37,16 @@ jobs:
       - name: Build project
         run: npm run build
 
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v4
+      - name: Package Pages artifact
+        run: |
+          tar --dereference --hard-dereference -cvf github-pages.tar --directory ./dist .
+
+      - name: Upload Pages artifact
+        uses: actions/upload-artifact@v5
         with:
-          path: ./dist
+          name: github-pages
+          path: github-pages.tar
+          retention-days: 1
 
   deploy:
     environment:
