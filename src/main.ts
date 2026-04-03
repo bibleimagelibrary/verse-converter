@@ -18,6 +18,7 @@ const app = document.querySelector<HTMLDivElement>("#app")!;
 const PARALLEL_PASSAGES_API =
   "https://q9md038uhk.execute-api.us-east-1.amazonaws.com/parallel-passages";
 const logoSrc = `${import.meta.env.BASE_URL}verse-converter.png`;
+const currentYear = new Date().getFullYear();
 
 app.innerHTML = `
   <div class="mx-auto max-w-[1040px] px-3 py-2 md:px-4">
@@ -76,6 +77,8 @@ app.innerHTML = `
       <h2 class="mb-4 mt-0 text-2xl font-semibold text-slate-800">Bible Books Reference</h2>
       <div class="mt-4 grid grid-cols-[repeat(auto-fill,minmax(100px,1fr))] gap-2 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(140px,1fr))]" id="booksGrid"></div>
     </div>
+
+    <p class="mt-4 text-center text-xs text-slate-500">@ ${currentYear} NIDA Institute</p>
 
     <button id="returnToTopBtn" class="fixed bottom-6 right-6 hidden !h-12 !w-12 items-center justify-center rounded-full text-white shadow-lg transition" style="background-color: var(--color-primary);" title="Return to top">
       ↑
