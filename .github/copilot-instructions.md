@@ -40,7 +40,7 @@ Preview production build locally.
 
 ## File Structure
 - `src/main.ts` - Application UI and event handlers
-- `src/verse-parser.ts` - Core parsing and validation logic (66 Bible books)
+- `src/verse-parser.ts` - Core parsing and validation logic
 - `src/style.css` - Modern responsive styling
 - `index.html` - HTML entry point
 - `vite.config.ts` - Vite configuration
@@ -56,7 +56,7 @@ Manual testing through the UI:
 6. Test invalid ranges (e.g., end before start)
 
 ## Customization
-To add translations or modify the Bible books list, edit the `BIBLE_BOOKS` array in `src/verse-parser.ts`.
+To add translations or modify parser behavior, edit `src/verse-parser.ts`.
 
 ## Performance
 Builds to just 3.82 KB (gzipped 1.72 KB) with zero runtime dependencies.

@@ -8,6 +8,12 @@ import {
 import { fetchBooks, Book, getBookById, getBookByCode } from "./book-service";
 import "./style.css";
 
+// You version linke format is https://www.bible.com/bible/${versionId}/${bookCode}.${chapter}.${verse};
+const YOU_VERSION_URL = 'https://www.bible.com/bible/';
+const YOU_VERSION_NASB2020 = '2692'; // Book ID for NASB2020 in YouVersion URL
+const bible_link = YOU_VERSION_URL + YOU_VERSION_NASB2020 + '/';
+
+
 const app = document.querySelector<HTMLDivElement>("#app")!;
 const PARALLEL_PASSAGES_API =
   "https://q9md038uhk.execute-api.us-east-1.amazonaws.com/parallel-passages";
@@ -20,7 +26,7 @@ app.innerHTML = `
       <h1 class="m-0 text-center text-2xl font-bold leading-tight text-slate-800 md:text-2xl">Bible Verse Converter & Parallel Passages</h1>
     </div>
     
-    <div class="mb-5 grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+    <div class="mb-5 grid grid-cols-1 gap-4 md:grid-cols-[1.5fr_auto_1.2fr]">
       <div class="rounded-lg border border-slate-300 bg-white p-6 shadow-sm">
         <div class="flex flex-col gap-6">
           <div class="flex flex-col gap-2">
@@ -31,8 +37,7 @@ app.innerHTML = `
               maxlength="100"
               class="app-input"
             />
-            <p class="m-0 text-[0.8rem] text-slate-500">Book Chapter or Book C:V or Book C:V - Book C:V</p>
-            <p class="m-0 text-[0.85rem] text-slate-500">e.g., Luke 10 or Matthew 1:1 or MAT 1:1-2:10</p>
+            <p class="m-0 text-[0.85rem] text-slate-500">e.g., Luke 10  or  LUK 1-2  or  MAT 1:1-2  or  MAR 1:1-2:5 </p>
           </div>
 
           <div class="flex flex-col gap-2">
@@ -43,13 +48,15 @@ app.innerHTML = `
               maxlength="50"
               class="app-input"
             />
-            <p class="m-0 text-[0.8rem] text-slate-500">BBBCCCVVV or BBBCCCVVV-BBBCCCVVV</p>
-            <p class="m-0 text-[0.85rem] text-slate-500">e.g., 040001001 or 040001001-040002010</p>
+            <p class="m-0 text-[0.8rem] text-slate-500">BBBCCCVVV[SSSMMM] (Book-Chapter-Verse-Segment-Morpheme)</p>
+            <p class="m-0 text-[0.85rem] text-slate-500">e.g., 042012053 or 040001002-040003004</p>
           </div>
+
+          <div id="rawParallelData" class="hidden"></div>
         </div>
       </div>
 
-      <div class="flex items-center justify-stretch md:justify-center">
+      <div class="sticky top-0 flex items-start justify-stretch md:justify-center md:pt-6">
         <div class="flex w-full flex-row gap-2 md:w-auto md:flex-col md:items-stretch md:gap-3">
           <button id="convertBtn" class="app-btn-primary">⇄ Convert</button>
           <button id="clearBtn" class="app-btn-secondary">⊗ Clear</button>
@@ -57,19 +64,22 @@ app.innerHTML = `
       </div>
 
       <div id="result" class="hidden rounded-lg border border-slate-300 bg-white p-6 shadow-sm">
-        <div id="resultContent"></div>
+        <div id="resultContent" class="mb-4 pb-4 border-b border-slate-200"></div>
+        <div id="parallelSection" class="hidden">
+          <h2 class="mb-4 mt-0 text-2xl font-semibold text-slate-800">Parallel Passages</h2>
+          <div id="parallelContent"></div>
+        </div>
       </div>
-    </div>
-
-    <div id="parallelSection" class="hidden mb-5 rounded-lg border border-slate-300 bg-white p-6 shadow-sm">
-      <h2 class="mb-3 mt-0 text-2xl font-semibold text-slate-800">Parallel Passages</h2>
-      <div id="parallelContent"></div>
     </div>
 
     <div class="rounded-lg border border-slate-300 bg-white p-6 shadow-sm">
       <h2 class="mb-4 mt-0 text-2xl font-semibold text-slate-800">Bible Books Reference</h2>
-      <div class="mt-4 grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(200px,1fr))]" id="booksGrid"></div>
+      <div class="mt-4 grid grid-cols-[repeat(auto-fill,minmax(100px,1fr))] gap-2 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(140px,1fr))]" id="booksGrid"></div>
     </div>
+
+    <button id="returnToTopBtn" class="fixed bottom-6 right-6 hidden !h-12 !w-12 items-center justify-center rounded-full text-white shadow-lg transition" style="background-color: var(--color-primary);" title="Return to top">
+      ↑
+    </button>
   </div>
 `;
 
@@ -90,6 +100,32 @@ const parallelContent = document.querySelector<HTMLDivElement>(
   "#parallelContent"
 )!;
 const booksGrid = document.querySelector<HTMLDivElement>("#booksGrid")!;
+const returnToTopBtn = document.querySelector<HTMLButtonElement>(
+  "#returnToTopBtn"
+)!;
+
+// Return to top button functionality
+window.addEventListener("scroll", () => {
+  if (window.scrollY > 300) {
+    returnToTopBtn.classList.remove("hidden");
+    returnToTopBtn.classList.add("flex");
+  } else {
+    returnToTopBtn.classList.add("hidden");
+    returnToTopBtn.classList.remove("flex");
+  }
+});
+
+returnToTopBtn.addEventListener("click", () => {
+  window.scrollTo({ top: 0, behavior: "auto" });
+});
+
+returnToTopBtn.addEventListener("mouseenter", () => {
+  returnToTopBtn.style.backgroundColor = "var(--color-primary-dark)";
+});
+
+returnToTopBtn.addEventListener("mouseleave", () => {
+  returnToTopBtn.style.backgroundColor = "var(--color-primary)";
+});
 
 // Initialize app
 async function initializeApp() {
@@ -106,11 +142,20 @@ function populateBooksGrid(books: Book[]) {
   books.forEach((book) => {
     const bookItem = document.createElement("div");
     bookItem.className =
-      "flex items-center gap-2 rounded-md border border-slate-300 bg-slate-100 p-3 text-[0.9rem] transition app-hover-primary-border hover:bg-slate-200";
-    bookItem.innerHTML = `<span class="min-w-[45px] font-mono font-bold app-text-primary">${String(book.id).padStart(
-      3,
-      "0"
-    )}</span> ${book.name} <span class="ml-2 font-mono text-[0.8rem] text-slate-500">(${book.code})</span>`;
+      "flex items-center gap-2 rounded-md border border-slate-300 bg-slate-100 p-2 text-[0.8rem] transition app-hover-primary-border hover:bg-slate-200 cursor-pointer";
+    bookItem.innerHTML = `
+      <div class="flex flex-col font-mono font-bold app-text-primary min-w-[35px] text-[0.75rem] leading-tight">
+        <span>${String(book.id).padStart(3, "0")}</span>
+        <span>${book.code}</span>
+      </div>
+      <span class="flex-1">${book.name}</span>
+    `;
+    
+    bookItem.addEventListener("click", () => {
+      readableInput.value = book.code + " ";
+      readableInput.focus();
+    });
+    
     booksGrid.appendChild(bookItem);
   });
 }
@@ -118,13 +163,6 @@ function populateBooksGrid(books: Book[]) {
 function showError(message: string) {
   const booksGrid = document.querySelector<HTMLDivElement>("#booksGrid")!;
   booksGrid.innerHTML = `<div style="grid-column: 1/-1; color: var(--color-secondary);">${message}</div>`;
-}
-
-function formatVerseIndex(verse: ParsedVerse): number {
-  const bookId = String(verse.bookId!);
-  const chapter = String(verse.chapter!).padStart(3, "0");
-  const verseNum = String(verse.verse!).padStart(3, "0");
-  return Number(`${bookId}${chapter}${verseNum}`);
 }
 
 function parseScriptureIndexes(scripture: string): { start: number; end: number } | null {
@@ -170,16 +208,68 @@ function overlapsRequestedRange(
   return indexes.start <= requestedEndIdx && requestedStartIdx <= indexes.end;
 }
 
+function renderScriptureReference(scripture: string): string {
+  const match = scripture
+    .trim()
+    .toUpperCase()
+    .match(/^([A-Z0-9]{3})\s+(\d+):(\d+)(?:-(\d+)|-(\d+):(\d+))?$/);
+  if (!match) {
+    return scripture;
+  }
+
+  const [, bookCode, chapter, verseStart, sameChapterEndVerse] = match;
+  const versePart = sameChapterEndVerse
+    ? `${verseStart}-${sameChapterEndVerse}`
+    : verseStart;
+  const href = `${bible_link}${bookCode}.${chapter}.${versePart}`;
+  return `<a href="${href}" target="_blank" rel="noopener noreferrer" class="underline decoration-slate-400 underline-offset-2 hover:decoration-current">${scripture}</a>`;
+}
+
 async function lookupParallelPassages(parsed: ParsedVerseRange) {
   const startVerse = parsed.startVerse!;
   const endVerse = parsed.endVerse!;
-  const requestedStartIdx = formatVerseIndex(startVerse);
-  const requestedEndIdx = formatVerseIndex(endVerse);
 
-  const scripture = {
-    start_idx: requestedStartIdx,
-    end_idx: requestedEndIdx,
+  // Normalize chapter-only parsed verses to 0 for API request construction.
+  const startVerseNum = startVerse.verse ?? 0;
+  const endVerseNum = endVerse.verse ?? 0;
+  
+  // Helper function to format verse index with chapter-only support
+  const getVerseIndex = (verse: ParsedVerse): number => {
+    const bookId = String(verse.bookId!).padStart(3, "0");
+    const chapter = String(verse.chapter!).padStart(3, "0");
+    const normalizedVerseNum = verse === startVerse ? startVerseNum : endVerseNum;
+    const verseNum = String(normalizedVerseNum).padStart(3, "0");
+    return Number(bookId + chapter + verseNum);
   };
+  
+  const requestedStartIdx = getVerseIndex(startVerse);
+  const requestedEndIdx = getVerseIndex(endVerse);
+
+  const startBookId = String(startVerse.bookId!).padStart(3, "0");
+  const startChapter = String(startVerse.chapter!).padStart(3, "0");
+  const chapterMaxEndIdx = Number(startBookId + startChapter + "999");
+
+  // Determine end_idx based on input type
+  let endIdx = requestedEndIdx;
+  if (requestedStartIdx === requestedEndIdx) {
+    // No range specified (start and end are the same)
+    if (startVerse.verse !== undefined && startVerse.verse !== 999) {
+      // Single explicit verse (e.g., "MAT 1:24") - lookup that verse only
+      endIdx = requestedStartIdx;
+    } else if (startVerse.verse === undefined && endVerse.verse === undefined) {
+      // Chapter-only (e.g., "MAT 1") - span the whole chapter with 999
+      endIdx = chapterMaxEndIdx;
+    }
+  }
+
+  const scripture: Record<string, number> = {
+    start_idx: requestedStartIdx,
+    end_idx: endIdx,
+  };
+
+  // Use the same effective range for client-side filtering as the API request payload.
+  const filterStartIdx = scripture.start_idx;
+  const filterEndIdx = scripture.end_idx;
 
   const endpoint = `${PARALLEL_PASSAGES_API}?scripture=${encodeURIComponent(
     JSON.stringify(scripture)
@@ -196,7 +286,13 @@ async function lookupParallelPassages(parsed: ParsedVerseRange) {
     }
 
     const data: unknown = await response.json();
-    const jsonOutput = JSON.stringify(data, null, 2);
+
+    // Display raw parallel data for validation
+    const rawDataDisplay = document.querySelector<HTMLDivElement>("#rawParallelData");
+    if (rawDataDisplay) {
+      rawDataDisplay.innerHTML = `<details style="margin-top: 12px; padding: 8px; background: #f3f4f6; border-radius: 4px; border: 1px solid #d1d5db;"><summary style="cursor: pointer; font-weight: bold; color: #666;">Raw API Data (Validation)</summary><pre style="margin: 8px 0 0 0; font-size: 0.75rem; overflow-x: auto;">${JSON.stringify({ normalizedParsed: { startVerse: { ...startVerse, verse: startVerseNum }, endVerse: { ...endVerse, verse: endVerseNum } }, request: scripture, response: data }, null, 2)}</pre></details>`;
+      rawDataDisplay.classList.remove("hidden");
+    }
 
     // Parse the data to display results. API may return either:
     // 1) [{ passage_id, scriptures: [...] }, ...]
@@ -239,46 +335,84 @@ async function lookupParallelPassages(parsed: ParsedVerseRange) {
       }
     }
 
-    for (const group of normalizedGroups) {
+    // Build a mapping of requested book passages to groups, then sort by chapter:verse
+    const requestedBook = getBookById(startVerse.bookId!);
+    const requestedBookCode = requestedBook?.code.toUpperCase();
+
+    type GroupMapping = {
+      groupIndex: number;
+      passage: string;
+      indexes: { start: number; end: number };
+    };
+
+    const groupOrderMapping: GroupMapping[] = [];
+
+    for (let groupIndex = 0; groupIndex < normalizedGroups.length; groupIndex++) {
+      const group = normalizedGroups[groupIndex];
       const requestedScriptures = group.scriptures.filter((scripture) =>
-        overlapsRequestedRange(scripture, requestedStartIdx, requestedEndIdx)
+        overlapsRequestedRange(scripture, filterStartIdx, filterEndIdx)
+      );
+
+      // Take the first requested passage from this group
+      if (requestedScriptures.length > 0) {
+        const indexes = parseScriptureIndexes(requestedScriptures[0]);
+        if (indexes) {
+          groupOrderMapping.push({
+            groupIndex,
+            passage: requestedScriptures[0],
+            indexes,
+          });
+        }
+      }
+    }
+
+    // Sort the mapping by chapter:verse ranges
+    groupOrderMapping.sort((a, b) => a.indexes.start - b.indexes.start);
+
+    // Now render groups in the sorted order (keeping groups intact)
+    readableHtml = `<div class="space-y-3">`;
+
+    for (const mapping of groupOrderMapping) {
+      const group = normalizedGroups[mapping.groupIndex];
+      const requestedScriptures = group.scriptures.filter((scripture) =>
+        overlapsRequestedRange(scripture, filterStartIdx, filterEndIdx)
       );
       const parallelScriptures = group.scriptures.filter(
         (scripture) =>
-          !overlapsRequestedRange(scripture, requestedStartIdx, requestedEndIdx)
+          !overlapsRequestedRange(scripture, filterStartIdx, filterEndIdx)
       );
 
-      const orderedScriptures = [...requestedScriptures, ...parallelScriptures];
+      // Separate parallel passages by requested book and others
+      const requestedBookParallels = parallelScriptures.filter((scripture) => {
+        const bookCode = scripture.split(/\s+/)[0];
+        return bookCode.toUpperCase() === requestedBookCode;
+      });
+      const otherBookParallels = parallelScriptures.filter((scripture) => {
+        const bookCode = scripture.split(/\s+/)[0];
+        return bookCode.toUpperCase() !== requestedBookCode;
+      });
 
-      readableHtml += `<div class="mb-3 rounded-md border border-slate-300 bg-slate-50 p-3">`;
-      readableHtml += `<div class="mb-2 text-[0.85rem] font-semibold text-slate-500">Passage ID: ${group.passage_id}</div>`;
+      // Build scriptures for this group in order
+      const groupScriptures = [...requestedScriptures, ...requestedBookParallels, ...otherBookParallels];
 
-      if (orderedScriptures.length > 0) {
-        readableHtml += `<div class="mb-2 rounded app-bg-primary-soft p-2 font-mono text-[0.95rem] font-semibold app-text-primary" style="border-left:4px solid var(--color-primary); box-shadow: inset 0 0 0 1px rgba(var(--color-primary),0.25);">${orderedScriptures[0]}</div>`;
-      }
+      if (groupScriptures.length > 0) {
+        readableHtml += `<div class="rounded-md border border-slate-300 bg-slate-50 p-3">`;
+        readableHtml += `<div class="mb-2 rounded app-bg-primary-soft p-2 font-mono text-[0.95rem] font-semibold app-text-primary" style="border-left:4px solid var(--color-primary); box-shadow: inset 0 0 0 1px rgba(var(--color-primary),0.25);">${renderScriptureReference(groupScriptures[0])}</div>`;
 
-      if (orderedScriptures.length > 1) {
-        readableHtml += `<div class="grid gap-1.5">`;
-        for (let i = 1; i < orderedScriptures.length; i++) {
-          readableHtml += `<div class="rounded bg-white p-2 font-mono text-[0.9rem] app-text-secondary" style="border-left:3px solid var(--color-secondary);">${orderedScriptures[i]}</div>`;
+        if (groupScriptures.length > 1) {
+          readableHtml += `<div class="grid gap-1.5">`;
+          for (let i = 1; i < groupScriptures.length; i++) {
+            readableHtml += `<div class="rounded bg-white p-2 font-mono text-[0.9rem] app-text-secondary" style="border-left:3px solid var(--color-secondary);">${renderScriptureReference(groupScriptures[i])}</div>`;
+          }
+          readableHtml += `</div>`;
         }
         readableHtml += `</div>`;
       }
-      readableHtml += `</div>`;
     }
 
-    parallelContent.innerHTML = `
-      <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <div class="rounded-lg border border-slate-300 bg-white p-4">
-          <h3 class="mb-3 text-lg font-semibold text-slate-800">Raw Response</h3>
-          <pre class="m-0 break-words whitespace-pre-wrap rounded-md border border-slate-300 bg-slate-50 p-3 font-mono text-sm leading-[1.4]">${jsonOutput}</pre>
-        </div>
-        <div class="rounded-lg border border-slate-300 bg-white p-4">
-          <h3 class="mb-3 text-lg font-semibold text-slate-800">Grouped by Passage</h3>
-          ${readableHtml || `<p class="m-0 text-slate-500">No grouped passage data found in response.</p>`}
-        </div>
-      </div>
-    `;
+    readableHtml += `</div>`;
+
+    parallelContent.innerHTML = readableHtml || `<p class="m-0 text-slate-500">No parallel passages found in response.</p>`;
   } catch (error) {
     const message =
       error instanceof Error
@@ -290,20 +424,21 @@ async function lookupParallelPassages(parsed: ParsedVerseRange) {
 }
 
 async function handleConvert() {
+  // Normalize verse ranges to remove spaces around dashes
+  codeInput.value = normalizeRangeDashSpacing(codeInput.value);
+  readableInput.value = normalizeRangeDashSpacing(readableInput.value);
+
   const codeValue = codeInput.value.trim();
   const readableValue = readableInput.value.trim();
 
   // Determine which input to parse
-  let sourceIsCode = false;
   let parsed;
 
   if (codeValue && !readableValue) {
     // Parse code format
-    sourceIsCode = true;
     parsed = parseVerseRange(codeValue);
   } else if (readableValue && !codeValue) {
     // Parse readable format
-    sourceIsCode = false;
     parsed = parseReadableRange(readableValue);
   } else if (!codeValue && !readableValue) {
     resultDiv.classList.add("hidden");
@@ -334,57 +469,15 @@ async function handleConvert() {
     return;
   }
 
-  // Generate the converted format
-  const startVerse = parsed.startVerse!;
-  const endVerse = parsed.endVerse!;
-
-  // Check if it's a single verse or a range
-  const isSingleVerse =
-    startVerse.bookId === endVerse.bookId &&
-    startVerse.chapter === endVerse.chapter &&
-    startVerse.verse === endVerse.verse;
-
-  // Generate output
+  // Generate output from parser
   const generatedCode = rangeToCode(parsed);
   const generatedReadable = parsed.formatted || "";
 
-  // Update input fields with the converted values
-  if (sourceIsCode) {
-    readableInput.value = generatedReadable;
-  } else {
-    codeInput.value = generatedCode;
-  }
+  // Always normalize both fields to parsed output so visible input reflects parser results.
+  readableInput.value = generatedReadable;
+  codeInput.value = generatedCode;
 
-  // Display result
-  // Get official book names from the books table
-  const startBook = getBookById(startVerse.bookId!);
-  const endBook = getBookById(endVerse.bookId!);
-  
-  const startBookName = startBook?.name || startVerse.bookName;
-  const endBookName = endBook?.name || endVerse.bookName;
-
-  let detailsHtml = "";
-
-  if (isSingleVerse) {
-    detailsHtml = `
-      <p><strong>Book:</strong> ${startBookName}</p>
-      <p><strong>Chapter:</strong> ${startVerse.chapter}</p>
-      <p><strong>Verse:</strong> ${startVerse.verse}</p>
-    `;
-  } else {
-    detailsHtml = `
-      <p><strong>Start:</strong> ${startBookName} ${startVerse.chapter}:${startVerse.verse}</p>
-      <p><strong>End:</strong> ${endBookName} ${endVerse.chapter}:${endVerse.verse}</p>
-    `;
-  }
-
-  resultContent.innerHTML = `
-    <div>
-      <div class="text-slate-800">
-        ${detailsHtml}
-      </div>
-    </div>
-  `;
+  resultContent.innerHTML = `<p class="m-0 text-lg font-semibold text-slate-800">${generatedReadable}</p>`;
   resultDiv.classList.remove("hidden");
 
   await lookupParallelPassages(parsed);
@@ -400,6 +493,7 @@ clearBtn.addEventListener("click", () => {
   readableInput.value = "";
   resultDiv.classList.add("hidden");
   parallelSection.classList.add("hidden");
+  document.querySelector<HTMLDivElement>("#rawParallelData")?.classList.add("hidden");
   readableInput.focus();
 });
 
@@ -414,6 +508,10 @@ readableInput.addEventListener("keypress", (e) => {
     void handleConvert();
   }
 });
+
+// Normalize verse ranges to remove spaces around dashes.
+const normalizeRangeDashSpacing = (value: string): string =>
+  value.replace(/\s*-\s*/g, "-");
 
 // Clear the other field when typing
 codeInput.addEventListener("input", () => {

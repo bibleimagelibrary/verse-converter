@@ -1,113 +1,122 @@
 # Bible Verse Converter
 
-A TypeScript web application that parses Bible verse codes and converts them to human-readable format.
+A TypeScript + Vite web app that converts Bible references between code format and readable format, and retrieves parallel passages.
 
-## Format
+## Supported Input Formats
 
-The application accepts Bible verse codes in the format: **BBBCCCVVV[SSMMM]**
+### Code Format
 
-- **BBB** (3 digits): Book ID (001-066 for standard 66-book Bible)
-- **CCC** (3 digits): Chapter number (padded with leading zeros)
-- **VVV** (3 digits): Verse number (padded with leading zeros)
-- **SSMMM** (optional): Segment and Morpheme codes (ignored for conversion)
+`BBBCCCVVV[SSSMMM]` or `BBBCCCVVV[SSSMMM]-BBBCCCVVV[SSSMMM]`
 
-### Single Verses
-- Input: `040001001` → Output: `Matthew 1:1`
-- Input: `023150006` → Output: `Isaiah 15:6`
-- Input: `006705011000000` → Output: `Joshua 7:5:11` (SSMMM ignored)
+- `BBB`: Book ID (001-066)
+- `CCC`: Chapter (3 digits)
+- `VVV`: Verse (3 digits)
+- `SSSMMM`: Optional segment/morpheme suffix (ignored by parsing/conversion)
 
-### Verse Ranges
-Format: `BBBCCCVVV-BBBCCCVVV`
+Examples:
 
-- Input: `040001001-040002010` → Output: `Matthew 1:1-2:10`
-- Input: `011010001-011010013` → Output: `1 Kings 10:1-13`
-- Input: `011010001-012001005` → Output: `1 Kings 10:1 - 2 Kings 1:5`
+- `042012053`
+- `040001002-040003004`
+- `040001001000000`
 
-**Note:** Start verse must come before end verse in the Bible. The optional SSMMM suffix is ignored on both verses.
+### Readable Format
 
-## Bible Books Reference
+Book names and book codes are supported, including numeric codes like `1TI`.
 
-The application uses the standard 66-book Bible:
+Examples:
 
-**Old Testament (39 books)**
-1. Genesis through Malachi
+- `Luke 10`
+- `MAT 1:1-2`
+- `MAT 1:23-2:1`
+- `1TI 1-4`
 
-**New Testament (27 books)**
-39. Matthew through Revelation
+## Parsing and Range Rules
 
-All books are indexed 1-66 with their traditional order.
+- Start must come before end in Bible order.
+- Chapter-only references use internal chapter-wide handling.
+- `999` is used internally for chapter-end API ranges and is hidden from user-facing output.
 
-## Installation
+## Parallel Passages Output
+
+- Parallel passages are grouped and sorted by requested passage order.
+- Each scripture reference in the parallel passage cards is rendered as a bible.com link.
+- URL format:
+	- `https://www.bible.com/bible/<versionId>/<bookCode>.<chapter>.<verse>`
+- Same-chapter ranges include end verse in URL:
+	- `MAT 1:23-24` -> `.../MAT.1.23-24`
+- Cross-chapter ranges use start chapter/verse only:
+	- `MAT 1:23-2:1` -> `.../MAT.1.23`
+
+## UI Behavior
+
+- Convert/Clear buttons remain between input and results cards.
+- Floating return-to-top button appears at bottom-right after scrolling.
+- Raw API Data panel:
+	- Hidden when there is no input/result.
+	- Rendered only after conversion.
+	- Collapsed by default.
+- Spaces around range dashes are normalized on Convert/Enter (not while typing).
+
+## Run Locally
+
+Install dependencies:
 
 ```bash
 npm install
 ```
 
-## Development
-
-Start the development server:
+Start dev server:
 
 ```bash
 npm run dev
 ```
 
-The application will open automatically at `http://localhost:5173`.
-
-## Build
+Build for production:
 
 ```bash
 npm run build
 ```
 
-Creates optimized production build in the `dist` directory.
+Preview production build:
 
-## Features
-
-- ✅ Parse single verse codes in BBBCCCVVV format
-- ✅ Parse verse ranges in BBBCCCVVV-BBBCCCVVV format
-- ✅ Convert to readable "Book Chapter:Verse" and "Book Chapter:Verse - Book Chapter:Verse" format
-- ✅ Validate book IDs (1-66), chapter and verse numbers
-- ✅ Validate verse ranges (start ≤ end)
-- ✅ Display all 66 Bible books with their IDs for reference
-- ✅ Responsive UI for desktop and mobile
-- ✅ Real-time conversion with Enter key support
-
-## Usage
-
-1. Enter a verse code or range (e.g., `040001001` or `040001001-040002010`)
-2. Click "Convert" or press Enter
-3. View the formatted result and detailed breakdown
-4. Reference the Bible books grid to find book IDs
-
-## Testing
-Manual testing through the UI:
-1. Try single verses: `040001001` (Matthew 1:1), `023150006` (Isaiah 15:6)
-2. Try verse ranges: `040001001-040001010` (Matthew 1:1-10), `011010001-011010013` (1 Kings 10:1-13)
-3. Try ranges across chapters: `040001020-040002015` (Matthew 1:20 - 2:15)
-4. Try invalid codes to see error messages
-5. Reference Bible books grid for book IDs
-6. Test with SSMMM suffix (e.g., `040001001000000` or `040001001-040002010000000`)
+```bash
+npm run preview
+```
 
 ## Project Structure
 
-```
+```text
 verse-converter/
 ├── src/
-│   ├── main.ts           # Main application logic and UI
-│   ├── verse-parser.ts   # Verse parsing and validation
-│   └── style.css         # Application styles
-├── index.html            # Entry point
-├── vite.config.ts        # Vite configuration
-├── tsconfig.json         # TypeScript configuration
-└── package.json          # Dependencies and scripts
+│   ├── main.ts                   # UI, conversion flow, API integration
+│   ├── verse-parser.ts  # Main parsing/formatting logic
+│   ├── book-service.ts           # Book lookup/fetch helpers
+│   └── style.css                 # Styling
+├── index.html
+├── vite.config.ts
+├── tailwind.config.js
+├── tsconfig.json
+└── package.json
 ```
 
-## Technology Stack
+## Manual Test Checklist
 
-- **TypeScript** - Type-safe JavaScript
-- **Vite** - Fast build tool and dev server
-- **Vanilla JavaScript** - No framework dependencies
-- **CSS3** - Modern styling with CSS variables
+1. Code single verse: `042012053`
+2. Code range: `040001002-040003004`
+3. Readable single verse: `MAT 1:23`
+4. Readable same-chapter range: `MAT 1:23-24`
+5. Readable cross-chapter range: `MAT 1:23-2:1`
+6. Readable chapter-only: `MAT 1`
+7. Readable numeric book code: `1TI 1-4`
+8. Confirm Raw API Data is hidden initially and collapsed when shown
+9. Confirm parallel passage references open bible.com links
+
+## Tech Stack
+
+- TypeScript
+- Vite
+- Vanilla JS/DOM APIs
+- Tailwind/CSS
 
 ## License
 

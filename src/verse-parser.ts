@@ -1,7 +1,8 @@
 import {
   getBooksSync,
   getBookById,
-  getBookIdByNameOrCode,
+  getBookByCode,
+  getBookByName,
 } from "./book-service";
 
 export interface ParsedVerse {
@@ -20,6 +21,40 @@ export interface ParsedVerseRange {
   endVerse?: ParsedVerse;
   formatted?: string;
   error?: string;
+}
+
+// Helper function to extract book name/code from input (handles "1 Samuel", "1 Kings", "1TI", etc.)
+function extractBookAndRange(input: string): { bookNameOrCode: string | null; range: string } {
+  // Match: optional 1/2/3 (with or without space), then letters (possibly multiple words)
+  // Examples: "Matthew 1:1" => { bookNameOrCode: "Matthew", range: "1:1" }
+  //           "1 Kings 3:10" => { bookNameOrCode: "1 Kings", range: "3:10" }
+  //           "1TI 1-4" => { bookNameOrCode: "1TI", range: "1-4" }
+  //           "Luke 10" => { bookNameOrCode: "Luke", range: "10" }
+  const match = input.match(/^([1-3]?[A-Za-z]+(?:\s[A-Za-z]+)*)(.*)$/);
+  return {
+    bookNameOrCode: match ? match[1].trim() : null,
+    range: match ? match[2].trim() : ""
+  };
+}
+
+// Validate and get book by name or code
+function getValidBook(nameOrCode: string | null) {
+  if (!nameOrCode) return null;
+  
+  // Try as code: 3 letters only, OR 1-3 followed by 2 letters (like "1TI", "2SA", "3JO")
+  if (/^[A-Za-z]{3}$/.test(nameOrCode)) {
+    const bookByCode = getBookByCode(nameOrCode);
+    if (bookByCode) return bookByCode;
+  } else if (/^[1-3][A-Za-z]{2}$/.test(nameOrCode)) {
+    const bookByCode = getBookByCode(nameOrCode);
+    if (bookByCode) return bookByCode;
+  }
+  
+  // Try as full name
+  const bookByName = getBookByName(nameOrCode);
+  if (bookByName) return bookByName;
+  
+  return null;
 }
 
 export function parseVerseCode(code: string): ParsedVerse {
@@ -116,18 +151,52 @@ function formatVerseRange(start: ParsedVerse, end: ParsedVerse): string {
     return "";
   }
 
+  // Helper: check if verse should be displayed (not undefined and not 999)
+  const hasDisplayVerse = (verse?: number): boolean => verse !== undefined && verse !== 999;
+
+  // Helper: format a single chapter reference with optional verse
+  const formatChapterRef = (book: string | undefined, chapter: number | undefined, verse?: number): string => {
+    if (!chapter) return "";
+    const bookPrefix = book ? book + " " : "";
+    if (hasDisplayVerse(verse)) {
+      return `${bookPrefix}${chapter}:${verse}`;
+    }
+    return `${bookPrefix}${chapter}`;
+  };
+
   // Same book
   if (start.bookId === end.bookId) {
     // Same chapter
     if (start.chapter === end.chapter) {
-      return `${start.bookName} ${start.chapter}:${start.verse}-${end.verse}`;
+      // Both have displayable verses
+      if (hasDisplayVerse(start.verse) && hasDisplayVerse(end.verse)) {
+        // If same verse, show as single verse (not a range)
+        if (start.verse === end.verse) {
+          return `${start.bookName} ${start.chapter}:${start.verse}`;
+        }
+        return `${start.bookName} ${start.chapter}:${start.verse}-${end.verse}`;
+      }
+      // Chapter only
+      return `${start.bookName} ${start.chapter}`;
     }
-    // Different chapters
-    return `${start.bookName} ${start.chapter}:${start.verse} - ${end.chapter}:${end.verse}`;
+    // Different chapters - show each with verse if available
+    const startRef = formatChapterRef(start.bookName, start.chapter, start.verse);
+    const endRef = formatChapterRef(undefined, end.chapter, end.verse);
+    // If same reference (shouldn't normally happen), return just one
+    if (startRef === endRef) {
+      return startRef;
+    }
+    return `${startRef}-${endRef}`;
   }
 
   // Different books
-  return `${start.bookName} ${start.chapter}:${start.verse} - ${end.bookName} ${end.chapter}:${end.verse}`;
+  const startRef = formatChapterRef(start.bookName, start.chapter, start.verse);
+  const endRef = formatChapterRef(end.bookName, end.chapter, end.verse);
+  // If same reference (shouldn't normally happen), return just one
+  if (startRef === endRef) {
+    return startRef;
+  }
+  return `${startRef}-${endRef}`;
 }
 
 export function parseVerseRange(rangeCode: string): ParsedVerseRange {
@@ -216,23 +285,19 @@ export function getBibleBooks() {
   }
 }
 
-// Helper function to get book ID by name (case-insensitive)
-// Get book ID by name or code (e.g., "Matthew" or "GEN")
-function getBookIdByNameOrCodeLocal(nameOrCode: string): number | null {
-  try {
-    return getBookIdByNameOrCode(nameOrCode);
-  } catch {
-    return null;
-  }
-}
-
 // Convert a ParsedVerse to code format (BBBCCCVVV with SSMMM as zeros)
 export function verseToCode(verse: ParsedVerse): string {
   if (!verse.isValid) return "";
   const bookId = String(verse.bookId).padStart(3, "0");
   const chapter = String(verse.chapter).padStart(3, "0");
-  const verseNum = String(verse.verse).padStart(3, "0");
-  return `${bookId}${chapter}${verseNum}000000`;
+  // Normalize 999 (internal end-of-chapter marker) to 0 for display
+  const verseNum = String(verse.verse ?? 0).padStart(3, "0");
+  let result = `${bookId}${chapter}${verseNum}`;
+  // Don't display 999 in the code output
+  if (verseNum === "999") {
+    result = `${bookId}${chapter}000`;
+  }
+  return `${result}00000`;  // SSMMM are always zeros in this format
 }
 
 // Convert a ParsedVerseRange to code format
@@ -259,235 +324,142 @@ export function rangeToCode(range: ParsedVerseRange): string {
   return `${startCode}-${endCode}`;
 }
 
-export interface ParsedReadableVerse {
-  isValid: boolean;
-  bookName?: string;
-  chapter?: number;
-  verse?: number;
-  error?: string;
-}
-
-// Parse human-readable format like "Matthew 1:1" or "Mark 3:16" or "Luke 10" (defaults to verse 1)
-export function parseReadableVerse(
-  input: string
-): ParsedReadableVerse {
+// Parse human-readable format supporting:
+// - Full book name: "Matthew 1:1", "1 Kings 3:10", "Luke 10"
+// - Book code: "MAT 1:1", "1KI 3:10"
+// - Range patterns:
+//   1. Full range: "Matthew 1:1-4:22"
+//   2. Same-chapter range: "Matthew 3:1-30"
+//   3. Chapter range with end verse: "Matthew 1-4:22"
+//   4. Chapter range: "Matthew 1-4"
+//   5. Single verse: "Matthew 3:10"
+//   6. Single chapter: "Matthew 13"
+export function parseReadableRange(input: string): ParsedVerseRange {
   const cleaned = input.trim();
 
-  // Match pattern: "Book Name Chapter:Verse" or "Book Name Chapter"
-  // This regex captures book name (including numbers like "1 Kings"), chapter, and optional verse
-  const match = cleaned.match(/^(.+?)\s+(\d+)(?::(\d+))?$/);
-
-  if (!match) {
+  if (!cleaned) {
     return {
       isValid: false,
-      error:
-        'Format should be "Book Chapter" or "Book Chapter:Verse" (e.g., "Luke 10" or "Matthew 1:1")',
+      error: "Input cannot be empty",
     };
   }
 
-  const bookName = match[1];
-  const chapter = parseInt(match[2], 10);
-  const verse = match[3] ? parseInt(match[3], 10) : 1; // Default to verse 1 if not provided
+  // Extract book name/code and range portion
+  const { bookNameOrCode, range } = extractBookAndRange(cleaned);
 
-  const bookId = getBookIdByNameOrCodeLocal(bookName);
-
-  if (!bookId) {
+  // Validate book
+  const book = getValidBook(bookNameOrCode);
+  if (!book) {
     return {
       isValid: false,
-      error: `Book "${bookName}" not found. Check the Bible books reference.`,
+      error: `Book "${bookNameOrCode}" not found. Check the Bible books reference.`,
     };
   }
 
-  if (chapter < 1) {
-    return {
-      isValid: false,
-      error: `Chapter must be greater than 0, got ${chapter}`,
-    };
-  }
+  const bookName = book.name;
+  const bookId = book.id;
 
-  if (verse < 1) {
-    return {
-      isValid: false,
-      error: `Verse must be greater than 0, got ${verse}`,
-    };
-  }
-
-  return {
+  // Helper to create a ParsedVerse
+  const createVerse = (chapter: number, verse?: number): ParsedVerse => ({
     isValid: true,
+    bookId,
     bookName,
     chapter,
     verse,
-  };
-}
+    formatted: verse !== undefined && verse !== 999 ? `${bookName} ${chapter}:${verse}` : `${bookName} ${chapter}`,
+  });
 
-// Parse human-readable range format like "Matthew 1:1-10" or "1 Kings 10:1 - 2 Kings 1:5"
-export function parseReadableRange(
-  input: string
-): ParsedVerseRange {
-  const cleaned = input.trim();
-
-  if (!cleaned.includes("-")) {
-    // Single verse in readable format
-    const verse = parseReadableVerse(cleaned);
-    if (verse.isValid) {
-      const bookId = getBookIdByNameOrCodeLocal(verse.bookName!);
-      if (!bookId) {
-        return {
-          isValid: false,
-          error: "Failed to find book ID",
-        };
-      }
-      const parsedVerse: ParsedVerse = {
-        isValid: true,
-        bookId,
-        bookName: verse.bookName,
-        chapter: verse.chapter,
-        verse: verse.verse,
-        formatted: `${verse.bookName} ${verse.chapter}:${verse.verse}`,
-      };
-      return {
-        isValid: true,
-        startVerse: parsedVerse,
-        endVerse: parsedVerse,
-        formatted: parsedVerse.formatted,
-      };
-    } else {
+  // Helper to return successful range
+  const returnRange = (start: ParsedVerse, end: ParsedVerse): ParsedVerseRange => {
+    if (isVersePositionBefore(end, start)) {
       return {
         isValid: false,
-        error: verse.error,
+        error: "Start verse must come before end verse in the Bible",
       };
     }
-  }
-
-  // Split by dash for range
-  const parts = cleaned.split("-").map((p) => p.trim());
-
-  if (parts.length !== 2) {
     return {
-      isValid: false,
-      error:
-        'Range should contain one dash (e.g., "Matthew 1:1-10" or "Matthew 1:1 - Mark 3:16")',
-    };
-  }
-
-  const [startPart, endPart] = parts;
-
-  // For same book ranges like "Matthew 1:1-10", endPart might just be "10"
-  // Try to parse end part as just verse, or full "Book Chapter:Verse"
-  let startVerse = parseReadableVerse(startPart);
-
-  if (!startVerse.isValid) {
-    return {
-      isValid: false,
-      error: `Invalid start verse: ${startVerse.error}`,
-    };
-  }
-
-  let endVerse: ParsedReadableVerse;
-
-  // Check if end part is just a number (could be verse or chapter)
-  if (/^\d+$/.test(endPart)) {
-    const num = parseInt(endPart, 10);
-    if (num < 1) {
-      return {
-        isValid: false,
-        error: `End must be greater than 0, got ${num}`,
-      };
-    }
-
-    // Determine if this is a verse or chapter number
-    // If the number is significantly larger than start chapter, treat as chapter
-    // Otherwise, treat as verse in the same chapter as start
-    if (num > startVerse.chapter! * 10) {
-      // Likely a chapter number (e.g., "Luke 10 - 12" means chapters)
-      endVerse = {
-        isValid: true,
-        bookName: startVerse.bookName,
-        chapter: num,
-        verse: 1, // Default to first verse of the chapter
-      };
-    } else {
-      // Likely a verse number in the same chapter
-      endVerse = {
-        isValid: true,
-        bookName: startVerse.bookName,
-        chapter: startVerse.chapter,
-        verse: num,
-      };
-    }
-  } else if (/^\d+:\d+$/.test(endPart)) {
-    // Chapter:Verse format without book (same book assumed)
-    const match = endPart.match(/^(\d+):(\d+)$/);
-    const chapter = parseInt(match![1], 10);
-    const verse = parseInt(match![2], 10);
-
-    if (chapter < 1 || verse < 1) {
-      return {
-        isValid: false,
-        error: `End chapter and verse must be greater than 0`,
-      };
-    }
-
-    endVerse = {
       isValid: true,
-      bookName: startVerse.bookName,
-      chapter: chapter,
-      verse: verse,
+      startVerse: start,
+      endVerse: end,
+      formatted: formatVerseRange(start, end),
     };
-  } else {
-    // Full "Book Chapter" or "Book Chapter:Verse" format
-    endVerse = parseReadableVerse(endPart);
-    if (!endVerse.isValid) {
-      return {
-        isValid: false,
-        error: `Invalid end verse: ${endVerse.error}`,
-      };
+  };
+
+  // If no range, it's just a book (or book with single verse/chapter)
+  if (!range) {
+    // Just book name -> whole first chapter by default
+    const singleVerse = createVerse(1);
+    return returnRange(singleVerse, singleVerse);
+  }
+
+  // Handle different range patterns
+  let match: RegExpMatchArray | null;
+
+  // 1. Full range: ch:v-ch:v (e.g. "1:1-4:22")
+  match = range.match(/^(\d+):(\d+)-(\d+):(\d+)$/);
+  if (match) {
+    const startVerse = createVerse(parseInt(match[1], 10), parseInt(match[2], 10));
+    const endVerse = createVerse(parseInt(match[3], 10), parseInt(match[4], 10));
+    return returnRange(startVerse, endVerse);
+  }
+
+  // 1b. Cross-chapter range: ch:v-ch (e.g. "1:24-2" means chapter 1 verse 24 to chapter 2, end)
+  // Only treat as cross-chapter if the end chapter number is greater than the start chapter
+  match = range.match(/^(\d+):(\d+)-(\d+)$/);
+  if (match) {
+    const startChapter = parseInt(match[1], 10);
+    const endChapter = parseInt(match[3], 10);
+    
+    // If end chapter > start chapter, this is a cross-chapter range
+    if (endChapter > startChapter) {
+      const startVerse = createVerse(startChapter, parseInt(match[2], 10));
+      const endVerse = createVerse(endChapter, 999); // End of chapter
+      return returnRange(startVerse, endVerse);
     }
   }
 
-  // Convert readable verses to parsed verses with book IDs
-  const startBookId = getBookIdByNameOrCodeLocal(startVerse.bookName!);
-  const endBookId = getBookIdByNameOrCodeLocal(endVerse.bookName!);
-
-  if (!startBookId || !endBookId) {
-    return {
-      isValid: false,
-      error: "Failed to find book ID",
-    };
+  // 2. Same-chapter range: ch:v-v (e.g. "3:1-30" means chapter 3, verse 1 to 30)
+  match = range.match(/^(\d+):(\d+)-(\d+)$/);
+  if (match) {
+    const chapter = parseInt(match[1], 10);
+    const startVerse = createVerse(chapter, parseInt(match[2], 10));
+    const endVerse = createVerse(chapter, parseInt(match[3], 10));
+    return returnRange(startVerse, endVerse);
   }
 
-  const startParsed: ParsedVerse = {
-    isValid: true,
-    bookId: startBookId,
-    bookName: startVerse.bookName,
-    chapter: startVerse.chapter,
-    verse: startVerse.verse,
-    formatted: `${startVerse.bookName} ${startVerse.chapter}:${startVerse.verse}`,
-  };
-
-  const endParsed: ParsedVerse = {
-    isValid: true,
-    bookId: endBookId,
-    bookName: endVerse.bookName,
-    chapter: endVerse.chapter,
-    verse: endVerse.verse,
-    formatted: `${endVerse.bookName} ${endVerse.chapter}:${endVerse.verse}`,
-  };
-
-  // Validate that start comes before end
-  if (isVersePositionBefore(endParsed, startParsed)) {
-    return {
-      isValid: false,
-      error: "Start verse must come before end verse in the Bible",
-    };
+  // 3. Chapter range with end verse: ch-ch:v (e.g. "1-4:22" means chapter 1 to 4, verse 22)
+  match = range.match(/^(\d+)-(\d+):(\d+)$/);
+  if (match) {
+    const startVerse = createVerse(parseInt(match[1], 10), 1);
+    const endVerse = createVerse(parseInt(match[2], 10), parseInt(match[3], 10));
+    return returnRange(startVerse, endVerse);
   }
 
-  const formatted = formatVerseRange(startParsed, endParsed);
+  // 4. Chapter range: ch-ch (e.g. "1-4" means chapter 1 to 4)
+  match = range.match(/^(\d+)-(\d+)$/);
+  if (match) {
+    const startVerse = createVerse(parseInt(match[1], 10));
+    // End chapter without explicit verse should map to verse 999.
+    const endVerse = createVerse(parseInt(match[2], 10), 999);
+    return returnRange(startVerse, endVerse);
+  }
+
+  // 5. Single verse: ch:v (e.g. "3:10")
+  match = range.match(/^(\d+):(\d+)$/);
+  if (match) {
+    const singleVerse = createVerse(parseInt(match[1], 10), parseInt(match[2], 10));
+    return returnRange(singleVerse, singleVerse);
+  }
+
+  // 6. Single chapter: ch (e.g. "13")
+  match = range.match(/^(\d+)$/);
+  if (match) {
+    const singleVerse = createVerse(parseInt(match[1], 10));
+    return returnRange(singleVerse, singleVerse);
+  }
 
   return {
-    isValid: true,
-    startVerse: startParsed,
-    endVerse: endParsed,
-    formatted,
+    isValid: false,
+    error: `Unable to parse range: "${cleaned}". Examples: "Matthew 1:1", "Luke 10", "John 1:1-3:16", "Romans 1-4"`,
   };
 }
